@@ -1076,6 +1076,13 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         /// <returns></returns>
         Task<Dictionary<string, T>> HashScanAsync<T>(string hashKey, string pattern, int pageSize = 10, CommandFlags flag = CommandFlags.None);
 
+        Task HashSetFromModelAsync<T>(string hashKey, T entity, CommandFlags commandFlags = CommandFlags.None);
+
+
+        Task<T> HashGetToModelAsync<T>(string hashKey, CommandFlags commandFlags = CommandFlags.None);
+
+        Task<T> HashGetToModelAsync<T>(string hashKey, string[] fields, CommandFlags commandFlags = CommandFlags.None);
+
         /// <summary>
         ///     Updates the expiry time of a redis cache object
         /// </summary>
@@ -1151,14 +1158,14 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="score">Score of the entry</param>
         /// <param name="flag">Command execution flag</param>
         /// <returns>
         ///     True if the object has been added. Otherwise false
         /// </returns>
         [Obsolete("The sync method will be removed with the next version. Please use the Async version.")]
-        bool SortedSetAdd<T>(string key, T value, double score, CommandFlags flag = CommandFlags.None);
+        bool SortedSetAdd(string key, string member, double score, CommandFlags flag = CommandFlags.None);
 
         /// <summary>
         ///     Add the entry to a sorted set with a score
@@ -1167,13 +1174,13 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="score">Score of the entry</param>
         /// <param name="flag">Command execution flag</param>
         /// <returns>
         ///     True if the object has been added. Otherwise false
         /// </returns>
-        Task<bool> SortedSetAddAsync<T>(string key, T value, double score, CommandFlags flag = CommandFlags.None);
+        Task<bool> SortedSetAddAsync(string key, string member, double score, CommandFlags flag = CommandFlags.None);
 
         /// <summary>
         ///     Remove the entry to a sorted set
@@ -1182,13 +1189,13 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="flag">Command execution flag</param>
         /// <returns>
         ///     True if the object has been removed. Otherwise false
         /// </returns>
         [Obsolete("The sync method will be removed with the next version. Please use the Async version.")]
-        bool SortedSetRemove<T>(string key, T value, CommandFlags flag = CommandFlags.None);
+        bool SortedSetRemove(string key, string member, CommandFlags flag = CommandFlags.None);
 
         /// <summary>
         ///     Remove the entry to a sorted set
@@ -1197,12 +1204,12 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="flag">Command execution flag</param>
         /// <returns>
         ///     True if the object has been removed. Otherwise false
         /// </returns>
-        Task<bool> SortedSetRemoveAsync<T>(string key, T value, CommandFlags flag = CommandFlags.None);
+        Task<bool> SortedSetRemoveAsync(string key, string member, CommandFlags flag = CommandFlags.None);
 
         /// <summary>
         ///     Get entries from sorted-set ordered
@@ -1222,7 +1229,7 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         ///     True if the object has been removed. Otherwise false
         /// </returns>
         [Obsolete("The sync method will be removed with the next version. Please use the Async version.")]
-        IEnumerable<T> SortedSetRangeByScore<T>(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending, long skip = 0L, long take = -1L, CommandFlags flag = CommandFlags.None);
+        IEnumerable<string> SortedSetRangeByScore(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending, long skip = 0L, long take = -1L, CommandFlags flag = CommandFlags.None);
 
         /// <summary>
         ///     Get entries from sorted-set ordered
@@ -1241,7 +1248,9 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         /// <returns>
         ///     True if the object has been removed. Otherwise false
         /// </returns>
-        Task<IEnumerable<T>> SortedSetRangeByScoreAsync<T>(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending, long skip = 0L, long take = -1L, CommandFlags flag = CommandFlags.None);
+        Task<IEnumerable<string>> SortedSetRangeByScoreAsync(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending, long skip = 0L, long take = -1L, CommandFlags flag = CommandFlags.None);
+
+        Task<IEnumerable<string>> SortedSetRangeByRankAsync(string key, long start, long stop, Order order = Order.Ascending, CommandFlags commandFlags = CommandFlags.None);
 
         /// <summary>
         ///     Add  the entry to a sorted set with  an increment score 
@@ -1250,14 +1259,14 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="score">Score of the entry</param>
         /// <param name="commandFlags">Command execution flags</param>
         /// <returns>
         ///      if the object has been added return previous score. Otherwise return 0.0 when first add
         /// </returns>
         [Obsolete("The sync method will be removed with the next version. Please use the Async version.")]
-        double SortedSetAddIncrement<T>(string key, T value, double score, CommandFlags commandFlags = CommandFlags.None);
+        double SortedSetAddIncrement(string key, string member, double score, CommandFlags commandFlags = CommandFlags.None);
 
         /// <summary>
         ///     Add the entry to a sorted set with  an increment score 
@@ -1272,6 +1281,14 @@ namespace StackExchange.Redis.Extensions.Core.Abstractions
         /// <returns>
         ///      if the object has been added return previous score. Otherwise return 0.0 when first add
         /// </returns>
-        Task<double> SortedSetAddIncrementAsync<T>(string key, T value, double score, CommandFlags commandFlags = CommandFlags.None);
+        Task<double> SortedSetAddIncrementAsync(string key, string member, double score, CommandFlags commandFlags = CommandFlags.None);
+
+
+        //Task RemoveKey(string key);
+
+        Task<long> StringIncrementAsync(string key, long value, CommandFlags commandFlags = CommandFlags.None);
+        Task<double> StringIncrementAsync(string key, double value, CommandFlags commandFlags = CommandFlags.None);
+
+        Task<LoadedLuaScript> ScriptLoadAsync(string script, System.Net.EndPoint endPoint = null);
     }
 }

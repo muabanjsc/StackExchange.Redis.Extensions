@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text;
 using System.Threading.Tasks;
 using StackExchange.Redis;
 using StackExchange.Redis.Extensions.Core.Abstractions;
@@ -13,6 +15,7 @@ namespace StackExchange.Redis.Extensions.Core.Implementations
 {
     internal class RedisDatabase : IRedisDatabase
     {
+        private static readonly Encoding encoding = Encoding.UTF8;
         private readonly IConnectionMultiplexer connectionMultiplexer;
         private readonly ServerEnumerationStrategy serverEnumerationStrategy = new ServerEnumerationStrategy();
         private readonly string keyprefix;
@@ -841,6 +844,65 @@ namespace StackExchange.Redis.Extensions.Core.Implementations
                 .ToDictionary(x => x.Name.ToString(), x => Serializer.Deserialize<T>(x.Value), StringComparer.Ordinal);
         }
 
+        //public async Task HashSetFromModelAsync<T>(string hashKey, T entity, CommandFlags commandFlags = CommandFlags.None)
+        //{
+        //    PropertyInfo[] properties = entity.GetType().GetProperties();
+        //    var entries = properties.Where(c => c.CanRead && c.CanWrite && c.PropertyType.IsPublic)
+        //        .Select(property => new HashEntry(property.Name, Serializer.Serialize(property.GetValue(entity))));
+        //    await Database.HashSetAsync(hashKey, entries.ToArray(), commandFlags);
+        //}
+
+        public async Task HashSetFromModelAsync<T>(string hashKey, T entity, CommandFlags commandFlags = CommandFlags.None)
+        {
+            PropertyInfo[] properties = entity.GetType().GetProperties();
+            var entries = properties.Where(c => c.CanRead && c.CanWrite && c.PropertyType.IsPublic)
+                .Select(prop => new HashEntry(prop.Name, Serializer.Serialize(prop.GetValue(entity))));
+            await Database.HashSetAsync(hashKey, entries.ToArray(), commandFlags);
+        }
+
+        public async Task<T> HashGetToModelAsync<T>(string hashKey, CommandFlags commandFlags = CommandFlags.None)
+        {
+            var items = (await Database.HashGetAllAsync(hashKey, commandFlags))
+                .ToDictionary(x => x.Name.ToString(), x => x.Value, StringComparer.Ordinal);
+
+            PropertyInfo[] properties = typeof(T).GetProperties();
+            var obj = Activator.CreateInstance(typeof(T));
+            foreach (var prop in properties)
+            {
+                if (prop.CanWrite == false || prop.PropertyType.IsPublic == false) continue;
+
+                if (items.TryGetValue(prop.Name, out RedisValue value))
+                {
+                    if (value.IsNull == false)
+                    {
+                        prop.SetValue(obj, Convert.ChangeType(Serializer.Deserialize(value, prop.PropertyType), prop.PropertyType));
+                    }
+                }
+            }
+            return (T)obj;
+        }
+
+        public async Task<T> HashGetToModelAsync<T>(string hashKey, string[] fields, CommandFlags commandFlags = CommandFlags.None)
+        {
+            RedisValue[] hashFields = new RedisValue[fields.Length];
+            for (int i = 0, l = fields.Length; i < l; i++) hashFields[i] = fields[i];
+
+            var items = await Database.HashGetAsync(hashKey, hashFields, commandFlags);
+
+            PropertyInfo[] props = typeof(T).GetProperties();
+            var obj = Activator.CreateInstance(typeof(T));
+            for (int i = 0, l = fields.Length; i < l; i++)
+            {
+                var prop = props.FirstOrDefault(c => c.Name == fields[i]);
+                if (prop == null || prop.CanWrite == false || prop.PropertyType.IsPublic == false) continue;
+                if (items[i].IsNull == false) {
+                    prop.SetValue(obj, Convert.ChangeType(Serializer.Deserialize(items[i], prop.PropertyType), prop.PropertyType));
+                }
+            }
+
+            return (T)obj;
+        }
+
         public bool UpdateExpiry(string key, DateTimeOffset expiresAt, CommandFlags flags = CommandFlags.None)
         {
             if (Database.KeyExists(key))
@@ -913,49 +975,56 @@ namespace StackExchange.Redis.Extensions.Core.Implementations
             return results;
         }
 
-        public bool SortedSetAdd<T>(string key, T value, double score, CommandFlags commandFlags = CommandFlags.None)
+        public bool SortedSetAdd(string key, string member, double score, CommandFlags commandFlags = CommandFlags.None)
         {
-            var entryBytes = Serializer.Serialize(value);
+            var entryBytes = encoding.GetBytes(member);
 
             return Database.SortedSetAdd(key, entryBytes, score, commandFlags);
         }
 
-        public async Task<bool> SortedSetAddAsync<T>(string key, T value, double score, CommandFlags commandFlags = CommandFlags.None)
+        public async Task<bool> SortedSetAddAsync(string key, string member, double score, CommandFlags commandFlags = CommandFlags.None)
         {
-            var entryBytes = Serializer.Serialize(value);
+            var entryBytes = encoding.GetBytes(member);
 
             return await Database.SortedSetAddAsync(key, entryBytes, score, commandFlags);
         }
 
-        public bool SortedSetRemove<T>(string key, T value, CommandFlags commandFlags = CommandFlags.None)
+        public bool SortedSetRemove(string key, string member, CommandFlags commandFlags = CommandFlags.None)
         {
-            var entryBytes = Serializer.Serialize(value);
+            var entryBytes = encoding.GetBytes(member);
 
             return Database.SortedSetRemove(key, entryBytes, commandFlags);
         }
 
-        public async Task<bool> SortedSetRemoveAsync<T>(string key, T value, CommandFlags commandFlags = CommandFlags.None)
+        public async Task<bool> SortedSetRemoveAsync(string key, string member, CommandFlags commandFlags = CommandFlags.None)
         {
-            var entryBytes = Serializer.Serialize(value);
+            var entryBytes = encoding.GetBytes(member);
 
             return await Database.SortedSetRemoveAsync(key, entryBytes, commandFlags);
         }
 
-        public IEnumerable<T> SortedSetRangeByScore<T>(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending, long skip = 0L,
+        public IEnumerable<string> SortedSetRangeByScore(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending, long skip = 0L,
             long take = -1L, CommandFlags commandFlags = CommandFlags.None)
         {
             var result = Database.SortedSetRangeByScore(key, start, stop, exclude, order, skip, take, commandFlags);
 
-            return result.Select(m => m == RedisValue.Null ? default : Serializer.Deserialize<T>(m));
+            return result.Select(m => m == RedisValue.Null ? string.Empty : (string)m);
         }
 
-        public async Task<IEnumerable<T>> SortedSetRangeByScoreAsync<T>(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending,
+        public async Task<IEnumerable<string>> SortedSetRangeByScoreAsync(string key, double start = double.NegativeInfinity, double stop = double.PositiveInfinity, Exclude exclude = Exclude.None, Order order = Order.Ascending,
             long skip = 0L,
             long take = -1L, CommandFlags commandFlags = CommandFlags.None)
         {
             var result = await Database.SortedSetRangeByScoreAsync(key, start, stop, exclude, order, skip, take, commandFlags);
 
-            return result.Select(m => m == RedisValue.Null ? default : Serializer.Deserialize<T>(m));
+            return result.Select(m => m == RedisValue.Null ? string.Empty : (string)m);
+        }
+
+        public async Task<IEnumerable<string>> SortedSetRangeByRankAsync(string key, long start, long stop, Order order = Order.Ascending, CommandFlags commandFlags = CommandFlags.None)
+        {
+            var result = await Database.SortedSetRangeByRankAsync(key, start, stop, order, commandFlags);
+            
+            return result.Select(m => m == RedisValue.Null ? string.Empty : (string)m);
         }
 
         public void Dispose()
@@ -1028,15 +1097,15 @@ namespace StackExchange.Redis.Extensions.Core.Implementations
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="score">Score of the entry</param>
         /// <param name="commandFlags">Command execution flags</param>
         /// <returns>
         ///      if the object has been added return previous score. Otherwise return 0.0 when first add
         /// </returns>
-        public double SortedSetAddIncrement<T>(string key, T value, double score, CommandFlags commandFlags = CommandFlags.None)
+        public double SortedSetAddIncrement(string key, string member, double score, CommandFlags commandFlags = CommandFlags.None)
         {
-            var entryBytes = Serializer.Serialize(value);
+            var entryBytes = encoding.GetBytes(member);
             return Database.SortedSetIncrement(key, entryBytes, score, commandFlags);
         }
 
@@ -1047,17 +1116,45 @@ namespace StackExchange.Redis.Extensions.Core.Implementations
         ///     Time complexity: O(1)
         /// </remarks>
         /// <param name="key">Key of the set</param>
-        /// <param name="value">The instance of T.</param>
+        /// <param name="member">The instance of T.</param>
         /// <param name="score">Score of the entry</param>
         /// <param name="commandFlags">Command execution flags</param>
         /// <returns>
         ///      if the object has been added return previous score. Otherwise return 0.0 when first add
         /// </returns>
         /// 
-        public async Task<double> SortedSetAddIncrementAsync<T>(string key, T value, double score, CommandFlags commandFlags = CommandFlags.None)
+        public async Task<double> SortedSetAddIncrementAsync(string key, string member, double score, CommandFlags commandFlags = CommandFlags.None)
         {
-            var entryBytes = Serializer.Serialize(value);
+            var entryBytes = encoding.GetBytes(member);
             return await Database.SortedSetIncrementAsync(key, entryBytes, score, commandFlags);
         }
+
+        //public async Task RemoveKey(string key)
+        //{
+        //    if (await Database.KeyExistsAsync(key))
+        //    {
+        //        await Database.KeyExpireAsync(key, new TimeSpan(0, 0, 0), CommandFlags.FireAndForget);
+        //    }
+        //}
+
+        public async Task<long> StringIncrementAsync(string key, long value, CommandFlags commandFlags = CommandFlags.None)
+        {
+            return await Database.StringIncrementAsync(key, value, commandFlags);
+        }
+
+        public async Task<double> StringIncrementAsync(string key, double value, CommandFlags commandFlags = CommandFlags.None)
+        {
+            return await Database.StringIncrementAsync(key, value, commandFlags);
+        }
+
+        #region Script
+        public async Task<LoadedLuaScript> ScriptLoadAsync(string script, System.Net.EndPoint endPoint = null)
+        {
+            if (endPoint == null) endPoint = Database.Multiplexer.GetEndPoints().FirstOrDefault();
+            var server = Database.Multiplexer.GetServer(endPoint);
+            LuaScript luaScript = LuaScript.Prepare(script);
+            return await luaScript.LoadAsync(server);
+        }
+        #endregion
     }
 }

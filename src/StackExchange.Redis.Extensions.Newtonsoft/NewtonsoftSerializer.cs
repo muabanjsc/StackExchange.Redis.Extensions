@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 using Newtonsoft.Json;
 using StackExchange.Redis.Extensions.Core;
 
@@ -34,7 +35,11 @@ namespace StackExchange.Redis.Extensions.Newtonsoft
 		/// <param name="settings">The settings.</param>
 		public NewtonsoftSerializer(JsonSerializerSettings settings)
         {
-            this.settings = settings ?? new JsonSerializerSettings();
+            this.settings = settings ?? new JsonSerializerSettings()
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                DateFormatHandling = DateFormatHandling.IsoDateFormat
+            };
         }
 
         /// <summary>
@@ -45,6 +50,12 @@ namespace StackExchange.Redis.Extensions.Newtonsoft
         public byte[] Serialize(object item)
         {
             var type = item?.GetType();
+            
+            if (type == typeof(string))
+            {
+                return encoding.GetBytes((string)item);
+            }
+
             var jsonString = JsonConvert.SerializeObject(item, type, settings);
             return encoding.GetBytes(jsonString);
         }
@@ -70,8 +81,22 @@ namespace StackExchange.Redis.Extensions.Newtonsoft
         /// <returns></returns>
         public T Deserialize<T>(byte[] serializedObject)
         {
-            var jsonString = encoding.GetString(serializedObject);
+            string jsonString = encoding.GetString(serializedObject);
+            if (typeof(T) == typeof(string))
+            {
+                return (T)((object)jsonString);
+            }
             return JsonConvert.DeserializeObject<T>(jsonString, settings);
+        }
+
+        public object Deserialize(byte[] serializedObject, Type t)
+        {
+            var jsonString = encoding.GetString(serializedObject);
+            if (t == typeof(string))
+            {
+                return jsonString;
+            }
+            return JsonConvert.DeserializeObject(jsonString, t, settings);
         }
     }
 }
